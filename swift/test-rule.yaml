@@ -1,0 +1,162 @@
+rules:
+  # ---------------------------------------------------------------------------
+  # MASWE-0001 — Insertion of Sensitive Data into Logs
+  # Check 1: Insecure Logging API Usage
+  # ---------------------------------------------------------------------------
+  - id: maswe-0001-c1-insecure-logging-api
+    languages: [swift]
+    severity: INFO
+    message: >-
+      Insecure logging API '$FUNC(...)' detected. These APIs write to system logs
+      that persist on-device and are visible system-wide. If sensitive data is
+      logged, it can be extracted by attackers with physical or logical access.
+      Remove this call from production code or wrap it in '#if DEBUG ... #endif'.
+    metadata:
+      masweId: MASWE-0001
+      checkId: check-1
+      category: security
+      masvs: ["MASVS-STORAGE-1"]
+      mastgRefs: [MASTG-TEST-0297, MASTG-TEST-0296, MASTG-BEST-0022]
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: NSLog(...)
+      - pattern: print(...)
+      - pattern: debugPrint(...)
+      - pattern: dump(...)
+      - pattern: println(...)
+      - pattern: printf(...)
+
+  # Objective-C / C logging APIs (NSLog, printf, NSAssert, NSCAssert)
+  - id: maswe-0001-c1-insecure-logging-api-objc
+    languages: [c, cpp]
+    severity: INFO
+    message: >-
+      Insecure logging or assertion API detected. NSLog writes to syslog and is
+      visible system-wide. printf outputs to stdout. NSAssert/NSCAssert log
+      messages on failure. Remove from production code or guard with
+      '#ifdef DEBUG ... #endif'.
+    metadata:
+      masweId: MASWE-0001
+      checkId: check-1
+      category: security
+      masvs: ["MASVS-STORAGE-1"]
+      mastgRefs: [MASTG-TEST-0297, MASTG-TEST-0296, MASTG-BEST-0022]
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: NSLog(...)
+      - pattern: printf(...)
+      - pattern: NSAssert(...)
+      - pattern: NSCAssert(...)
+
+  # HIGH-confidence: Logging API with sensitive data in arguments (Swift + Obj-C)
+  - id: maswe-0001-c1-sensitive-data-logged
+    languages: [swift, c, cpp]
+    severity: HIGH
+    message: >-
+      Sensitive data appears to be logged via '$FUNC(...)'. Variable or
+      interpolated value names matching sensitive data identifiers (e.g.,
+      password, token, secret, creditCard) were detected in log arguments.
+      Remove this call or redact sensitive data before logging.
+    metadata:
+      masweId: MASWE-0001
+      checkId: check-1
+      category: security
+      masvs: ["MASVS-STORAGE-1"]
+      mastgRefs: [MASTG-TEST-0297, MASTG-TEST-0296, MASTG-BEST-0022]
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: NSLog(..., $ARG, ...)
+          - pattern: print(..., $ARG, ...)
+          - pattern: debugPrint(..., $ARG, ...)
+          - pattern: dump($ARG, ...)
+          - pattern: println(..., $ARG, ...)
+          - pattern: printf(..., $ARG, ...)
+          - pattern: NSAssert(..., $ARG, ...)
+          - pattern: NSCAssert(..., $ARG, ...)
+      - metavariable-regex:
+          metavariable: $ARG
+          regex: '(?i).*(password|passwd|pwd|passcode|token|secret|secretKey|secret_key|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|clientSecret|client_secret|signingKey|encryptionKey|masterKey|decryptionKey|creditCard|credit_card|cardNumber|card_number|cvv|cvc|ssn|socialSecurity|social_security|accessToken|refreshToken|authToken|bearerToken|idToken|sessionToken|credential|credentials|jwt|otp|biometric|fingerprint)'
+
+  # HIGH-confidence: Sensitive data in Unified Logging calls (Swift)
+  - id: maswe-0001-c1-sensitive-data-logged-unified
+    languages: [swift]
+    severity: HIGH
+    message: >-
+      Apple Unified Logging API (Logger/os_log) appears to log sensitive data.
+      Variable or interpolated value names matching sensitive data identifiers
+      were detected. Even with default redaction, avoid logging sensitive values.
+    metadata:
+      masweId: MASWE-0001
+      checkId: check-1
+      category: security
+      masvs: ["MASVS-STORAGE-1"]
+      mastgRefs: [MASTG-TEST-0297, MASTG-TEST-0296, MASTG-BEST-0022]
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.log(..., $ARG, ...)
+          - pattern: $LOGGER.debug(..., $ARG, ...)
+          - pattern: $LOGGER.info(..., $ARG, ...)
+          - pattern: $LOGGER.notice(..., $ARG, ...)
+          - pattern: $LOGGER.warning(..., $ARG, ...)
+          - pattern: $LOGGER.error(..., $ARG, ...)
+          - pattern: $LOGGER.fault(..., $ARG, ...)
+          - pattern: $LOGGER.critical(..., $ARG, ...)
+          - pattern: os_log(..., $ARG, ...)
+      - metavariable-regex:
+          metavariable: $ARG
+          regex: '(?i).*(password|passwd|pwd|passcode|token|secret|secretKey|secret_key|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|clientSecret|client_secret|signingKey|encryptionKey|masterKey|decryptionKey|creditCard|credit_card|cardNumber|card_number|cvv|cvc|ssn|socialSecurity|social_security|accessToken|refreshToken|authToken|bearerToken|idToken|sessionToken|credential|credentials|jwt|otp|biometric|fingerprint)'
+
+  # ---------------------------------------------------------------------------
+  # MASWE-0001 — Insertion of Sensitive Data into Logs
+  # Check 2: Unified Logging Privacy Modifier Misuse
+  # ---------------------------------------------------------------------------
+
+  # Detect Logger calls using .public privacy modifier (Swift)
+  - id: maswe-0001-c2-unified-logging-public-modifier
+    languages: [swift]
+    severity: WARNING
+    message: >-
+      Apple Unified Logging call uses '.public' privacy modifier, which overrides
+      default redaction. Sensitive data marked as '.public' is written to system
+      logs in plaintext. Remove '.public' from sensitive values — the Unified
+      Logging system redacts dynamic data by default.
+    metadata:
+      masweId: MASWE-0001
+      checkId: check-2
+      category: security
+      masvs: ["MASVS-STORAGE-1"]
+      mastgRefs: [MASTG-TEST-0297, MASTG-TEST-0296, MASTG-BEST-0022]
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.log(...)
+          - pattern: $LOGGER.debug(...)
+          - pattern: $LOGGER.info(...)
+          - pattern: $LOGGER.notice(...)
+          - pattern: $LOGGER.warning(...)
+          - pattern: $LOGGER.error(...)
+          - pattern: $LOGGER.fault(...)
+          - pattern: $LOGGER.critical(...)
+      - pattern-regex: 'privacy:\s*\.public'
+
+  # Detect %{public} format specifier in os_log calls (regex-based)
+  - id: maswe-0001-c2-os-log-public-format
+    languages: [swift]
+    severity: WARNING
+    message: >-
+      os_log call uses '%{public}' format specifier, which disables default
+      redaction. Sensitive data formatted with '%{public}' is written to system
+      logs in plaintext. Use the default format or '%{private}' instead.
+    metadata:
+      masweId: MASWE-0001
+      checkId: check-2
+      category: security
+      masvs: ["MASVS-STORAGE-1"]
+      mastgRefs: [MASTG-TEST-0297, MASTG-TEST-0296, MASTG-BEST-0022]
+      confidence: HIGH
+    patterns:
+      - pattern: os_log(...)
+      - pattern-regex: '%\{public\}'
+
